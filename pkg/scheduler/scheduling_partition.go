@@ -32,6 +32,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/common/security"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/placement"
+	"github.com/apache/incubator-yunikorn-core/pkg/trace"
 )
 
 type partitionSchedulingContext struct {
@@ -46,6 +47,7 @@ type partitionSchedulingContext struct {
 	nodes            map[string]*SchedulingNode        // nodes assigned to this partition
 	placementManager *placement.AppPlacementManager    // placement manager for this partition
 	partitionManager *partitionManager                 // manager for this partition
+	traceContext     trace.SchedulerTraceContext
 
 	sync.RWMutex
 }
@@ -363,10 +365,14 @@ func (psc *partitionSchedulingContext) calculateOutstandingRequests() []*schedul
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
+	_, _ = startSpanWrapper(psc.traceContext, PartitionLevel, TryAllocatePhase, psc.Name)
+
 	if !resources.StrictlyGreaterThanZero(psc.root.GetPendingResource()) {
+		finishActiveSpanWrapper(psc.traceContext, SkipState, NoPendingRequestInfo)
 		// nothing to do just return
 		return nil
 	}
+	defer finishActiveSpanWrapper(psc.traceContext, "", "")
 	// try allocating from the root down
 	return psc.root.tryAllocate(psc)
 }
@@ -374,6 +380,9 @@ func (psc *partitionSchedulingContext) tryAllocate() *schedulingAllocation {
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (psc *partitionSchedulingContext) tryReservedAllocate() *schedulingAllocation {
+	_, _ = startSpanWrapper(psc.traceContext, PartitionLevel, ReservedAllocatePhase, psc.Name)
+	defer finishActiveSpanWrapper(psc.traceContext, "", "")
+
 	// try allocating from the root down
 	return psc.root.tryReservedAllocate(psc)
 }
@@ -381,6 +390,9 @@ func (psc *partitionSchedulingContext) tryReservedAllocate() *schedulingAllocati
 // Process the allocation and make the changes in the partition.
 // If the allocation needs to be passed on to the cache true will be returned if not false is returned
 func (psc *partitionSchedulingContext) allocate(alloc *schedulingAllocation) bool {
+	_, _ = startSpanWrapper(psc.traceContext, PartitionLevel, AllocatePhase, psc.Name)
+	defer finishActiveSpanWrapper(psc.traceContext, "", "")
+
 	psc.Lock()
 	defer psc.Unlock()
 	// partition is locked nothing can change from now on
@@ -601,4 +613,12 @@ func (psc *partitionSchedulingContext) unReserveCount(appID string, asks int) {
 			psc.reservedApps[appID] -= asks
 		}
 	}
+}
+
+func (psc *partitionSchedulingContext) getTraceContext() trace.SchedulerTraceContext {
+	return psc.traceContext
+}
+
+func (psc *partitionSchedulingContext) setTraceContext(ctx trace.SchedulerTraceContext) {
+	psc.traceContext = ctx
 }

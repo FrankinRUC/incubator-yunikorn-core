@@ -70,7 +70,7 @@ func TestCheckConditions(t *testing.T) {
 	}
 
 	// Check if we can allocate on scheduling node (no plugins)
-	if !node.preAllocateConditions("test") {
+	if node.preAllocateConditions("test") != nil {
 		t.Error("node with scheduling set to true no plugins should allow allocation")
 	}
 

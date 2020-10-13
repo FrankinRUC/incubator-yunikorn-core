@@ -445,12 +445,19 @@ func (sa *SchedulingApplication) getOutstandingRequests(headRoom *resources.Reso
 
 // Try a regular allocation of the pending requests
 func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
+	_, _ = startSpanWrapper(ctx.traceContext, AppLevel, AllocatePhase, sa.ApplicationInfo.ApplicationID)
+	defer finishActiveSpanWrapper(ctx.traceContext, "", "")
+
 	sa.Lock()
 	defer sa.Unlock()
 	// make sure the request are sorted
+	_, _ = startSpanWrapper(ctx.traceContext, AppLevel, SortRequestsPhase, sa.ApplicationInfo.ApplicationID)
 	sa.sortRequests(false)
+	finishActiveSpanWrapper(ctx.traceContext, "", "")
+
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
+		_, _ = startSpanWrapper(ctx.traceContext, RequestLevel, AllocatePhase, request.AskProto.AllocationKey)
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
 			// post scheduling events via the scheduler plugin
@@ -465,15 +472,20 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 					eventCache.AddEvent(event)
 				}
 			}
+
+			finishActiveSpanWrapper(ctx.traceContext, SkipState,
+				fmt.Sprintf(BeyondQueueHeadroomInfo, headRoom, request.AllocatedResource))
 			continue
 		}
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {
-			alloc := sa.tryNodes(request, nodeIterator)
+			alloc := sa.tryNodes(ctx, request, nodeIterator)
 			// have a candidate return it
 			if alloc != nil {
+				finishActiveSpanWrapper(ctx.traceContext, alloc.result.String(), "")
 				return alloc
 			}
 		}
+		finishActiveSpanWrapper(ctx.traceContext, SkipState, "")
 	}
 	// no requests fit, skip to next app
 	return nil
@@ -481,10 +493,14 @@ func (sa *SchedulingApplication) tryAllocate(headRoom *resources.Resource, ctx *
 
 // Try a reserved allocation of an outstanding reservation
 func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resource, ctx *partitionSchedulingContext) *schedulingAllocation {
+	_, _ = startSpanWrapper(ctx.traceContext, AppLevel, ReservedAllocatePhase, sa.ApplicationInfo.ApplicationID)
+	defer finishActiveSpanWrapper(ctx.traceContext, "", "")
+
 	sa.Lock()
 	defer sa.Unlock()
 	// process all outstanding reservations and pick the first one that fits
 	for _, reserve := range sa.reservations {
+		_, _ = startSpanWrapper(ctx.traceContext, RequestLevel, ReservedAllocatePhase, reserve.askKey)
 		ask := sa.requests[reserve.askKey]
 		// sanity check and cleanup if needed
 		if ask == nil || ask.getPendingAskRepeat() == 0 {
@@ -502,29 +518,42 @@ func (sa *SchedulingApplication) tryReservedAllocate(headRoom *resources.Resourc
 			// remove the reservation as this should not be reserved
 			alloc := newSchedulingAllocation(unreserveAsk, reserve.nodeID)
 			alloc.result = unreserved
+			finishActiveSpanWrapper(ctx.traceContext, alloc.result.String(), NoPendingRequestInfo)
 			return alloc
 		}
 		// check if this fits in the queue's head room
 		if !resources.FitIn(headRoom, ask.AllocatedResource) {
+			finishActiveSpanWrapper(ctx.traceContext, SkipState,
+				fmt.Sprintf(BeyondQueueHeadroomInfo, headRoom, ask.AllocatedResource))
 			continue
 		}
 		// check allocation possibility
-		alloc := sa.tryNode(reserve.node, ask)
+		alloc, err := sa.tryNode(reserve.node, ask)
 		// allocation worked set the result and return
 		if alloc != nil {
 			alloc.result = allocatedReserved
+			finishActiveSpanWrapper(ctx.traceContext, alloc.result.String(), "")
 			return alloc
 		}
+		info := ""
+		if err != nil {
+			info = err.Error()
+		}
+		finishActiveSpanWrapper(ctx.traceContext, SkipState, info)
 	}
 	// lets try this on all other nodes
 	for _, reserve := range sa.reservations {
+		_, _ = startSpanWrapper(ctx.traceContext, RequestLevel, ReservedAllocatePhase, reserve.askKey)
+
 		if nodeIterator := ctx.getNodeIterator(); nodeIterator != nil {
 			alloc := sa.tryNodesNoReserve(reserve.ask, nodeIterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved
 			if alloc != nil {
+				finishActiveSpanWrapper(ctx.traceContext, alloc.result.String(), "")
 				return alloc
 			}
 		}
+		finishActiveSpanWrapper(ctx.traceContext, SkipState, "")
 	}
 	return nil
 }
@@ -538,7 +567,7 @@ func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk,
 		if !node.nodeInfo.FitInNode(ask.AllocatedResource) || node.NodeID == reservedNode {
 			continue
 		}
-		alloc := sa.tryNode(node, ask)
+		alloc, _ := sa.tryNode(node, ask)
 		// allocation worked so return
 		if alloc != nil {
 			alloc.reservedNodeID = reservedNode
@@ -552,7 +581,10 @@ func (sa *SchedulingApplication) tryNodesNoReserve(ask *schedulingAllocationAsk,
 
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
-func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIterator NodeIterator) *schedulingAllocation {
+func (sa *SchedulingApplication) tryNodes(ctx *partitionSchedulingContext, ask *schedulingAllocationAsk, nodeIterator NodeIterator) *schedulingAllocation {
+	_, _ = startSpanWrapper(ctx.traceContext, NodesLevel, "", "")
+	defer finishActiveSpanWrapper(ctx.traceContext, "", "")
+
 	var nodeToReserve *SchedulingNode
 	scoreReserved := math.Inf(1)
 	// check if the ask is reserved or not
@@ -561,11 +593,15 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 	allowReserve := len(reservedAsks) < int(ask.pendingRepeatAsk)
 	for nodeIterator.HasNext() {
 		node := nodeIterator.Next()
+		_, _ = startSpanWrapper(ctx.traceContext, NodeLevel, "", node.NodeID)
+
 		// skip over the node if the resource does not fit the node at all.
 		if !node.nodeInfo.FitInNode(ask.AllocatedResource) {
+			finishActiveSpanWrapper(ctx.traceContext, SkipState,
+				fmt.Sprintf(RequestBeyondTotalResourceInfo, ask.AllocatedResource))
 			continue
 		}
-		alloc := sa.tryNode(node, ask)
+		alloc, err := sa.tryNode(node, ask)
 		// allocation worked so return
 		if alloc != nil {
 			// check if the node was reserved for this ask: if it is set the result and return
@@ -577,11 +613,9 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", allocKey))
 				alloc.result = allocatedReserved
-				return alloc
-			}
-			// we could also have a different node reserved for this ask if it has pick one of
-			// the reserved nodes to unreserve (first one in the list)
-			if len(reservedAsks) > 0 {
+			} else if len(reservedAsks) > 0 {
+				// we could also have a different node reserved for this ask if it has pick one of
+				// the reserved nodes to unreserve (first one in the list)
 				nodeID := strings.TrimSuffix(reservedAsks[0], "|"+allocKey)
 				log.Logger().Debug("allocate picking reserved ask during non reserved allocate",
 					zap.String("appID", sa.ApplicationInfo.ApplicationID),
@@ -590,9 +624,11 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 				alloc.result = allocatedReserved
 				alloc.reservedNodeID = nodeID
 				return alloc
+			} else {
+				// nothing reserved just return this as a normal alloc
+				alloc.result = allocated
 			}
-			// nothing reserved just return this as a normal alloc
-			alloc.result = allocated
+			finishActiveSpanWrapper(ctx.traceContext, alloc.result.String(), "")
 			return alloc
 		}
 		// nothing allocated should we look at a reservation?
@@ -611,6 +647,12 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 				nodeToReserve = node
 			}
 		}
+
+		info := ""
+		if err != nil {
+			info = err.Error()
+		}
+		finishActiveSpanWrapper(ctx.traceContext, SkipState, info)
 	}
 	// we have not allocated yet, check if we should reserve
 	// NOTE: the node should not be reserved as the iterator filters them but we do not lock the nodes
@@ -622,7 +664,7 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 			zap.Int("reservations", len(reservedAsks)),
 			zap.Int32("pendingRepeats", ask.pendingRepeatAsk))
 		// skip the node if conditions can not be satisfied
-		if !nodeToReserve.preReserveConditions(allocKey) {
+		if nodeToReserve.preReserveConditions(allocKey) != nil {
 			return nil
 		}
 		// return allocation proposal and mark it as a reservation
@@ -635,17 +677,17 @@ func (sa *SchedulingApplication) tryNodes(ask *schedulingAllocationAsk, nodeIter
 }
 
 // Try allocating on one specific node
-func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAllocationAsk) *schedulingAllocation {
+func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAllocationAsk) (*schedulingAllocation, error) {
 	allocKey := ask.AskProto.AllocationKey
 	toAllocate := ask.AllocatedResource
 	// create the key for the reservation
 	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false); err != nil {
 		// skip schedule onto node
-		return nil
+		return nil, err
 	}
 	// skip the node if conditions can not be satisfied
-	if !node.preAllocateConditions(allocKey) {
-		return nil
+	if err := node.preAllocateConditions(allocKey); err != nil {
+		return nil, err
 	}
 	// everything OK really allocate
 	if node.allocateResource(toAllocate, false) {
@@ -676,9 +718,9 @@ func (sa *SchedulingApplication) tryNode(node *SchedulingNode, ask *schedulingAl
 		}
 
 		// return allocation
-		return newSchedulingAllocation(ask, node.NodeID)
+		return newSchedulingAllocation(ask, node.NodeID), nil
 	}
-	return nil
+	return nil, fmt.Errorf("no enough available resource")
 }
 
 // Recover the allocation for this app on the node provided.

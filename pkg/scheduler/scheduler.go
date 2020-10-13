@@ -35,6 +35,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/schedulerevent"
+	"github.com/apache/incubator-yunikorn-core/pkg/trace"
 	"github.com/apache/incubator-yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -49,6 +50,7 @@ type Scheduler struct {
 	preemptionContext        *preemptionContext        // Preemption context
 	eventHandlers            handler.EventHandlers     // list of event handlers
 	pendingSchedulerEvents   chan interface{}          // queue for scheduler events
+	schedulerTracer          trace.SchedulerTracer     // scheduler tracer
 }
 
 func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
@@ -56,6 +58,11 @@ func NewScheduler(clusterInfo *cache.ClusterInfo) *Scheduler {
 	m.clusterInfo = clusterInfo
 	m.clusterSchedulingContext = NewClusterSchedulingContext()
 	m.pendingSchedulerEvents = make(chan interface{}, 1024*1024)
+	schedulerTracer, err := trace.NewSchedulerTracer(nil)
+	if err != nil {
+		log.Logger().Error("Creating scheduler tracer failed", zap.Error(err))
+	}
+	m.schedulerTracer = schedulerTracer
 	return m
 }
 
@@ -635,10 +642,21 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 // The main scheduling routine.
 // Process each partition in the scheduler, walk over each queue and app to check if anything can be scheduled.
 func (s *Scheduler) schedule() {
+	traceCtx := s.schedulerTracer.NewTraceContext()
+	rootSpan, _ := startSpanWrapper(traceCtx, RootLevel, "", "")
+
+	counters := map[string]int{}
+	partitionExistFlag := false
 	// schedule each partition defined in the cluster
 	for _, psc := range s.clusterSchedulingContext.getPartitionMapClone() {
+		partitionExistFlag = true
+		psc.setTraceContext(traceCtx)
+		_, _ = startSpanWrapper(traceCtx, PartitionLevel, "", psc.Name)
+
 		// if there are no resources in the partition just skip
 		if psc.root.getMaxResource() == nil {
+			finishActiveSpanWrapper(traceCtx, SkipState, NoMaxResourceInfo)
+			counters[SkipState]++
 			continue
 		}
 		// try reservations first: gets back a node ID if the allocation occurs on a node
@@ -657,7 +675,18 @@ func (s *Scheduler) schedule() {
 			if psc.allocate(alloc) {
 				s.eventHandlers.CacheEventHandler.HandleEvent(newSingleAllocationProposal(alloc))
 			}
+			counters[alloc.result.String()]++
+		} else {
+			counters[SkipState]++
 		}
+		finishActiveSpanWrapper(traceCtx, "", "")
+	}
+	if partitionExistFlag {
+		for key, cnt := range counters {
+			rootSpan.SetTag(fmt.Sprintf("%vCount", key), cnt)
+		}
+		// finish root span only if partitions is not empty
+		finishActiveSpanWrapper(traceCtx, "", "")
 	}
 }
 

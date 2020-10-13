@@ -549,11 +549,19 @@ func (sq *SchedulingQueue) getMaxResource() *resources.Resource {
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
 func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
+	_, _ = startSpanWrapper(ctx.traceContext, QueueLevel, TryAllocatePhase, sq.Name)
+	defer finishActiveSpanWrapper(ctx.traceContext, "", "")
+
 	if sq.isLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
-		for _, app := range sq.sortApplications() {
+
+		_, _ = startSpanWrapper(ctx.traceContext, QueueLevel, SortAppsPhase, sq.Name)
+		apps := sq.sortApplications()
+		_ = finishActiveSpanWrapper(ctx.traceContext, "", "")
+
+		for _, app := range apps {
 			alloc := app.tryAllocate(headRoom, ctx)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
@@ -564,8 +572,12 @@ func (sq *SchedulingQueue) tryAllocate(ctx *partitionSchedulingContext) *schedul
 			}
 		}
 	} else {
+		_, _ = startSpanWrapper(ctx.traceContext, QueueLevel, SortQueuesPhase, sq.Name)
+		queues := sq.sortQueues()
+		_ = finishActiveSpanWrapper(ctx.traceContext, "", "")
+
 		// process the child queues (filters out queues without pending requests)
-		for _, child := range sq.sortQueues() {
+		for _, child := range queues {
 			alloc := child.tryAllocate(ctx)
 			if alloc != nil {
 				return alloc
@@ -594,6 +606,9 @@ func (sq *SchedulingQueue) getQueueOutstandingRequests(total *[]*schedulingAlloc
 // Applications are currently NOT sorted and are iterated over in a random order.
 // Lock free call this all locks are taken when needed in called functions
 func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) *schedulingAllocation {
+	_, _ = startSpanWrapper(ctx.traceContext, QueueLevel, ReservedAllocatePhase, sq.Name)
+	defer finishActiveSpanWrapper(ctx.traceContext, "", "")
+
 	if sq.isLeafQueue() {
 		// skip if it has no reservations
 		reservedCopy := sq.getReservedApps()
@@ -602,6 +617,7 @@ func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) 
 			headRoom := sq.getHeadRoom()
 			// process the apps
 			for appID, numRes := range reservedCopy {
+				_, _ = startSpanWrapper(ctx.traceContext, AppLevel, ReservedAllocatePhase, appID)
 				if numRes > 1 {
 					log.Logger().Debug("multiple reservations found for application trying to allocate one",
 						zap.String("appID", appID),
@@ -614,8 +630,10 @@ func (sq *SchedulingQueue) tryReservedAllocate(ctx *partitionSchedulingContext) 
 						zap.String("queueName", sq.Name),
 						zap.String("appID", appID),
 						zap.String("allocation", alloc.String()))
+					_ = finishActiveSpanWrapper(ctx.traceContext, "", "")
 					return alloc
 				}
+				_ = finishActiveSpanWrapper(ctx.traceContext, "", "")
 			}
 		}
 	} else {
