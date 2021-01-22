@@ -3,6 +3,8 @@ package plugins
 import (
 	"fmt"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins/internals"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins/defaults"
 )
@@ -20,6 +22,7 @@ func NewRegistry() Registry {
 	return Registry{
 		defaults.DefaultApplicationsPluginName:   defaults.NewDefaultApplicationsPlugin,
 		defaults.DefaultRequestsPluginName:       defaults.NewDefaultRequestsPlugin,
+		internals.InternalAppsRequestsPluginName: internals.NewInternalAppsRequestsPlugin,
 	}
 }
 
