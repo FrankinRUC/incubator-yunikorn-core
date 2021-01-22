@@ -307,13 +307,10 @@ func benchmarkIteratePendingRequests(b *testing.B, numPriorities, numRequestsPer
 	startTime := time.Now()
 	b.ResetTimer()
 
-	// execute get all pending for 1000 times
+	// execute get all pending for many times
 	testTimes := 100
 	for i := 0; i < testTimes; i++ {
 		app.requests.SortForAllocation()
-		//for reqIt.HasNext() {
-		//	reqIt.Next()
-		//}
 	}
 
 	// Stop timer and calculate duration
@@ -358,7 +355,6 @@ func benchmarkSortApplications(b *testing.B, numApplications int, sortPolicy pol
 	// empty leaf queue
 	leaf, err = createManagedQueue(parent, "leaf", false, nil)
 	leaf.sortType = sortPolicy
-	//leaf.appRequestSorter = newAppRequestSorter(sortPolicy)
 	if err != nil {
 		b.Fatalf("failed to create leaf queue: %v", err)
 	}
@@ -379,11 +375,11 @@ func benchmarkSortApplications(b *testing.B, numApplications int, sortPolicy pol
 		}
 	}
 
-	// Reset  timer for this benchmark
+	// Reset timer for this benchmark
 	startTime := time.Now()
 	b.ResetTimer()
 
-	// execute sorting for 1000 times
+	// execute sorting for many times
 	testTimes := 100
 	for i := 0; i < testTimes; i++ {
 		leaf.applications.SortForAllocation()

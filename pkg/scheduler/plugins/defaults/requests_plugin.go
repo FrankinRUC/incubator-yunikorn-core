@@ -150,11 +150,9 @@ func SortAskByPriority(requests []interfaces.Request, ascending bool) {
 	sort.SliceStable(requests, func(i, j int) bool {
 		l := requests[i]
 		r := requests[j]
-
 		if l.GetPriority() == r.GetPriority() {
 			return l.GetCreateTime().Before(r.GetCreateTime())
 		}
-
 		if ascending {
 			return l.GetPriority() < r.GetPriority()
 		}
