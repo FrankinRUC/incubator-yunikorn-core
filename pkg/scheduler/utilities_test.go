@@ -19,8 +19,9 @@
 package scheduler
 
 import (
-	"strconv"
 	"testing"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 
 	"gotest.tools/assert"
 
@@ -142,23 +143,12 @@ func newNodeMaxResource(nodeID string, max *resources.Resource) *objects.Node {
 
 // Simple node with just an ID in the node.
 // That is all we need for iteration
-func newNode(nodeID string) *objects.Node {
+func newNode(nodeID string) interfaces.Node {
 	proto := &si.NewNodeInfo{
 		NodeID:     nodeID,
 		Attributes: nil,
 	}
 	return objects.NewNode(proto)
-}
-
-// A list of nodes that can be iterated over.
-func newSchedNodeList(number int) []*objects.Node {
-	list := make([]*objects.Node, number)
-	for i := 0; i < number; i++ {
-		num := strconv.Itoa(i)
-		node := newNode("node-" + num)
-		list[i] = node
-	}
-	return list
 }
 
 // partition with an expected basic queue hierarchy

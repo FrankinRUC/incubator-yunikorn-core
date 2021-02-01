@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins/internals"
 
@@ -21,6 +22,9 @@ func setupInternalPlugin() {
 		Plugins: []*configs.PluginConfig{
 			{
 				Name: internals.InternalAppsRequestsPluginName,
+			},
+			{
+				Name: internals.InternalNodeManagerPluginName,
 			},
 		},
 	}

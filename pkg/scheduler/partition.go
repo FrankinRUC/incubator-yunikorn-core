@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	schedulingplugins "github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins"
+
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -61,6 +63,7 @@ type PartitionContext struct {
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
 	nodeSortingPolicy      *policies.NodeSortingPolicy     // Global Node Sorting Policies
+	nodeManager            interfaces.NodeManager
 
 	sync.RWMutex
 }
@@ -83,6 +86,7 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		nodes:        make(map[string]*objects.Node),
 		allocations:  make(map[string]*objects.Allocation),
 	}
+	pc.nodeManager = schedulingplugins.GetNodeManagerPlugin().NewNodeManager(pc, conf.NodeManagerPluginArgs)
 	pc.partitionManager = &partitionManager{
 		pc: pc,
 		cc: cc,
@@ -499,17 +503,17 @@ func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
 
 // Get a copy of the nodes from the partition.
 // This list does not include reserved nodes or nodes marked unschedulable
-func (pc *PartitionContext) getSchedulableNodes() []*objects.Node {
+func (pc *PartitionContext) GetSchedulableNodes() []interfaces.Node {
 	return pc.getNodes(true)
 }
 
 // Get a copy of the nodes from the partition.
 // Excludes unschedulable nodes only, reserved node inclusion depends on the parameter passed in.
-func (pc *PartitionContext) getNodes(excludeReserved bool) []*objects.Node {
+func (pc *PartitionContext) getNodes(excludeReserved bool) []interfaces.Node {
 	pc.RLock()
 	defer pc.RUnlock()
 
-	nodes := make([]*objects.Node, 0)
+	nodes := make([]interfaces.Node, 0)
 	for _, node := range pc.nodes {
 		// filter out the nodes that are not scheduling
 		if !node.IsSchedulable() || (excludeReserved && node.IsReserved()) {
@@ -568,6 +572,10 @@ func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*o
 			}
 		}
 	}
+	// set node manager for this node
+	node.SetNodeObserver(pc.nodeManager)
+	// notify new-added node to node manager
+	pc.nodeManager.Add(node)
 
 	// Node is added update the metrics
 	metrics.GetSchedulerMetrics().IncActiveNodes()
@@ -616,6 +624,8 @@ func (pc *PartitionContext) removeNodeInternal(nodeID string) []*objects.Allocat
 	for i, appID := range reservedKeys {
 		pc.unReserveCountInternal(appID, releasedAsks[i])
 	}
+	// notify removed node to node observer
+	pc.nodeManager.Remove(node)
 
 	log.Logger().Info("node removed from partition",
 		zap.String("partitionName", pc.Name),
@@ -682,7 +692,7 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryAllocate(pc.GetNodeIterator)
+	alloc := pc.root.TryAllocate(pc.GetNodeSortingAlgorithm)
 	if alloc != nil {
 		return pc.allocate(alloc)
 	}
@@ -697,7 +707,7 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryReservedAllocate(pc.GetNodeIterator)
+	alloc := pc.root.TryReservedAllocate(pc.GetNodeSortingAlgorithm)
 	if alloc != nil {
 		return pc.allocate(alloc)
 	}
@@ -836,27 +846,14 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 		zap.Int("reservationsRemoved", num))
 }
 
-// Get the iterator for the sorted nodes list from the partition.
-// Sorting should use a copy of the node list not the main list.
-func (pc *PartitionContext) getNodeIteratorForPolicy(nodes []*objects.Node) interfaces.NodeIterator {
+func (pc *PartitionContext) GetNodeSortingPolicyType() policies.SortingPolicy {
 	pc.RLock()
-	configuredPolicy := pc.nodeSortingPolicy.PolicyType
-	pc.RUnlock()
-	if configuredPolicy == policies.Unknown {
-		return nil
-	}
-	// Sort Nodes based on the policy configured.
-	objects.SortNodes(nodes, configuredPolicy)
-	return newDefaultNodeIterator(nodes)
+	defer pc.RUnlock()
+	return pc.nodeSortingPolicy.PolicyType
 }
 
-// Create a node iterator for the schedulable nodes based on the policy set for this partition.
-// The iterator is nil if there are no schedulable nodes available.
-func (pc *PartitionContext) GetNodeIterator() interfaces.NodeIterator {
-	if nodeList := pc.getSchedulableNodes(); len(nodeList) != 0 {
-		return pc.getNodeIteratorForPolicy(nodeList)
-	}
-	return nil
+func (pc *PartitionContext) GetNodeSortingAlgorithm() interfaces.NodeSortingAlgorithm {
+	return pc.nodeManager
 }
 
 // Update the reservation counter for the app
@@ -922,10 +919,10 @@ func (pc *PartitionContext) GetApplications() []*objects.Application {
 	return appList
 }
 
-func (pc *PartitionContext) GetNodes() []*objects.Node {
+func (pc *PartitionContext) GetNodes() []interfaces.Node {
 	pc.RLock()
 	defer pc.RUnlock()
-	var nodeList []*objects.Node
+	var nodeList []interfaces.Node
 	for _, node := range pc.nodes {
 		nodeList = append(nodeList, node)
 	}
@@ -1111,4 +1108,8 @@ func (pc *PartitionContext) removeAllocationAsk(appID string, allocationKey stri
 			pc.unReserveCount(appID, reservedAsks)
 		}
 	}
+}
+
+func (pc *PartitionContext) GetName() string {
+	return pc.Name
 }

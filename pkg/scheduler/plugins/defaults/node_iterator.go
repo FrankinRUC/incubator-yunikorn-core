@@ -16,13 +16,12 @@
  limitations under the License.
 */
 
-package scheduler
+package defaults
 
 import (
 	"math/rand"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
-	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/objects"
 )
 
 // All iterators extend the base iterator
@@ -30,7 +29,7 @@ type baseIterator struct {
 	interfaces.NodeIterator
 	countIdx int
 	size     int
-	nodes    []*objects.Node
+	nodes    []interfaces.Node
 }
 
 // Reset the iterator to start from the beginning
@@ -63,7 +62,7 @@ type defaultNodeIterator struct {
 }
 
 // Create a new default iterator
-func newDefaultNodeIterator(schedulerNodes []*objects.Node) *defaultNodeIterator {
+func NewDefaultNodeIterator(schedulerNodes []interfaces.Node) *defaultNodeIterator {
 	it := &defaultNodeIterator{}
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)
@@ -79,7 +78,7 @@ type roundRobinNodeIterator struct {
 }
 
 // The starting point is randomised in the slice.
-func newRoundRobinNodeIterator(schedulerNodes []*objects.Node) *roundRobinNodeIterator {
+func NewRoundRobinNodeIterator(schedulerNodes []interfaces.Node) *roundRobinNodeIterator {
 	it := &roundRobinNodeIterator{}
 	it.nodes = schedulerNodes
 	it.size = len(schedulerNodes)

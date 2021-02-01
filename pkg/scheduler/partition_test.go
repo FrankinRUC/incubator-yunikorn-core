@@ -302,7 +302,7 @@ func TestGetNodes(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")
 
-	nodes := partition.getSchedulableNodes()
+	nodes := partition.GetSchedulableNodes()
 	assert.Equal(t, 0, len(nodes), "list should have been empty")
 
 	err = partition.AddNode(newNodeMaxResource(nodeID1, resources.NewResource()), nil)
@@ -337,22 +337,22 @@ func TestGetNodes(t *testing.T) {
 	assert.NilError(t, err, "reserve on node4 should not have failed")
 
 	assert.Equal(t, 4, len(partition.nodes), "node list not correct length")
-	nodes = partition.getSchedulableNodes()
+	nodes = partition.GetSchedulableNodes()
 	// returned list should be only two long
 	assert.Equal(t, 2, len(nodes), "node list not filtered")
 	// map iteration is random so don't know which we get first
-	for _, node = range nodes {
-		if node.NodeID != nodeID1 && node.NodeID != nodeID2 {
-			t.Fatalf("unexpected node returned in list: %s", node.NodeID)
+	for _, node := range nodes {
+		if node.GetNodeID() != nodeID1 && node.GetNodeID() != nodeID2 {
+			t.Fatalf("unexpected node returned in list: %s", node.GetNodeID())
 		}
 	}
 	nodes = partition.getNodes(false)
 	// returned list should be 3 long: no reserved filter
 	assert.Equal(t, 3, len(nodes), "node list was incorrectly filtered")
 	// check if we have all nodes: since there is a backing map we cannot have duplicates
-	for _, node = range nodes {
-		if node.NodeID == node3 {
-			t.Fatalf("unexpected node returned in list: %s", node.NodeID)
+	for _, node := range nodes {
+		if node.GetNodeID() == node3 {
+			t.Fatalf("unexpected node returned in list: %s", node.GetNodeID())
 		}
 	}
 }
@@ -1019,7 +1019,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	assert.NilError(t, err, "failed to add node node-3 to the partition")
 	// Try to allocate one of the reservation. We go directly to the root queue not using the partition otherwise
 	// we confirm before we get back in the test code and cannot remove the ask
-	alloc := partition.root.TryReservedAllocate(partition.GetNodeIterator)
+	alloc := partition.root.TryReservedAllocate(partition.GetNodeSortingAlgorithm)
 	if alloc == nil || alloc.Result != objects.AllocatedReserved {
 		t.Fatalf("expected allocatedReserved allocation to be returned %v", alloc)
 	}

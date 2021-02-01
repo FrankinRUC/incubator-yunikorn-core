@@ -566,7 +566,8 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 }
 
 // Try a regular allocation of the pending requests
-func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
+func (sa *Application) tryAllocate(headRoom *resources.Resource,
+	getNodeSortingAlgorithmFn func() interfaces.NodeSortingAlgorithm) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// get all the sorted requests from the app sorted in order
@@ -588,7 +589,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 			}
 			continue
 		}
-		iterator := nodeIterator()
+		iterator := getNodeSortingAlgorithmFn().GetNodeIterator(request)
 		if iterator != nil {
 			alloc := sa.tryNodes(request, iterator)
 			// have a candidate return it
@@ -602,7 +603,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, nodeIterator fu
 }
 
 // Try a reserved allocation of an outstanding reservation
-func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() interfaces.NodeIterator) *Allocation {
+func (sa *Application) tryReservedAllocate(headRoom *resources.Resource,
+	getNodeSortingAlgorithmFn func() interfaces.NodeSortingAlgorithm) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// process all outstanding reservations and pick the first one that fits
@@ -638,7 +640,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	}
 	// lets try this on all other nodes
 	for _, reserve := range sa.reservations {
-		iterator := nodeIterator()
+		iterator := getNodeSortingAlgorithmFn().GetNodeIterator(nil)
 		if iterator != nil {
 			alloc := sa.tryNodesNoReserve(reserve.ask, iterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved

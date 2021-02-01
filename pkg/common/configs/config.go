@@ -45,12 +45,13 @@ type SchedulerConfig struct {
 // - a list of users specifying limits on the partition
 // - the preemption configuration for the partition
 type PartitionConfig struct {
-	Name           string
-	Queues         []QueueConfig
-	PlacementRules []PlacementRule           `yaml:",omitempty" json:",omitempty"`
-	Limits         []Limit                   `yaml:",omitempty" json:",omitempty"`
-	Preemption     PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
-	NodeSortPolicy NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
+	Name                  string
+	Queues                []QueueConfig
+	PlacementRules        []PlacementRule           `yaml:",omitempty" json:",omitempty"`
+	Limits                []Limit                   `yaml:",omitempty" json:",omitempty"`
+	Preemption            PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
+	NodeSortPolicy        NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
+	NodeManagerPluginArgs interface{}               `yaml:",omitempty" json:",omitempty"`
 }
 
 type PartitionPreemptionConfig struct {
@@ -136,6 +137,19 @@ type Limit struct {
 // - type: different type of policies supported (binpacking, fair etc)
 type NodeSortingPolicy struct {
 	Type string
+}
+
+// Plugins specifies multiple plugins in scheduling cycles.
+type PluginsConfig struct {
+	Plugins []*PluginConfig
+}
+
+// Plugin specifies a plugin name and its arguments when applicable.
+type PluginConfig struct {
+	// Name defines the name of plugin
+	Name string
+	// Args defines the arguments passed to the plugins at the time of initialization. Args can have arbitrary structure.
+	Args interface{}
 }
 
 type LoadSchedulerConfigFunc func(policyGroup string) (*SchedulerConfig, error)

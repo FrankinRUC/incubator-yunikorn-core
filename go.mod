@@ -26,9 +26,11 @@ require (
 	github.com/apache/incubator-yunikorn-scheduler-interface v0.9.1-0.20201215141356-df4d86d2197b
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/golang/protobuf v1.4.0 // indirect
+	github.com/google/btree v1.0.0
 	github.com/gorilla/mux v1.7.3
 	github.com/kr/text v0.2.0 // indirect
 	github.com/looplab/fsm v0.1.0
+	github.com/mitchellh/mapstructure v1.4.1
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1 // indirect

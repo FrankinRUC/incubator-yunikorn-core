@@ -102,22 +102,22 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 			calculatedTotalNodeRes := resources.Add(node.GetAllocatedResource(), node.GetOccupiedResource())
 			calculatedTotalNodeRes.AddTo(node.GetAvailableResource())
 			if !resources.Equals(node.GetCapacity(), calculatedTotalNodeRes) {
-				nodeTotalMismatch = append(nodeTotalMismatch, node.NodeID)
+				nodeTotalMismatch = append(nodeTotalMismatch, node.GetNodeID())
 			}
 			if node.GetAllocatedResource().HasNegativeValue() {
-				nodesWithNegResources = append(nodesWithNegResources, node.NodeID)
+				nodesWithNegResources = append(nodesWithNegResources, node.GetNodeID())
 			}
 			if node.GetAvailableResource().HasNegativeValue() {
-				nodesWithNegResources = append(nodesWithNegResources, node.NodeID)
+				nodesWithNegResources = append(nodesWithNegResources, node.GetNodeID())
 			}
 			if node.GetCapacity().HasNegativeValue() {
-				nodesWithNegResources = append(nodesWithNegResources, node.NodeID)
+				nodesWithNegResources = append(nodesWithNegResources, node.GetNodeID())
 			}
 			if node.GetOccupiedResource().HasNegativeValue() {
-				nodesWithNegResources = append(nodesWithNegResources, node.NodeID)
+				nodesWithNegResources = append(nodesWithNegResources, node.GetNodeID())
 			}
 			if !resources.StrictlyGreaterThanOrEquals(node.GetCapacity(), node.GetAllocatedResource()) {
-				nodeCapacityMismatch = append(nodeCapacityMismatch, node.NodeID)
+				nodeCapacityMismatch = append(nodeCapacityMismatch, node.GetNodeID())
 			}
 		}
 		partitionReservationRatio = append(partitionReservationRatio, float32(sumReservation)/(float32(part.GetTotalNodeCount())))

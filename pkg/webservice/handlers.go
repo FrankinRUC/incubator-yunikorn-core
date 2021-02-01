@@ -154,7 +154,7 @@ func getNodesInfo(w http.ResponseWriter, r *http.Request) {
 	for _, partition := range lists {
 		var nodesDao []*dao.NodeDAOInfo
 		for _, node := range partition.GetNodes() {
-			nodeDao := getNodeJSON(node)
+			nodeDao := getNodeJSON(node.(*objects.Node))
 			nodesDao = append(nodesDao, nodeDao)
 		}
 		result = append(result, &dao.NodesDAOInfo{
@@ -351,7 +351,7 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 			v = float64(resources.CalculateAbsUsedCapacity(total, resourceAllocated).Resources[name])
 			idx := int(math.Dim(math.Ceil(v/10), 1))
 			mapResult[idx]++
-			mapName[idx] = append(mapName[idx], node.NodeID)
+			mapName[idx] = append(mapName[idx], node.GetNodeID())
 		}
 	}
 	for k := 0; k < 10; k++ {
