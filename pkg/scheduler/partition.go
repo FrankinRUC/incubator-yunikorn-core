@@ -715,7 +715,7 @@ func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryAllocate() *objects.Allocation {
-	if prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(ProfilingID); prof != nil {
+	if prof := profiling.GetProfilingFromCacheOrEmpty(ProfilingID); prof != nil {
 		prof.AddCheckpoint("Try-Allocate Partition")
 	}
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {

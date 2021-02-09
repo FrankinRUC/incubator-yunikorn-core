@@ -23,7 +23,7 @@ go 1.12
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
-	github.com/TaoYang526/goutils v0.0.0-20210208093809-10a703e80a04
+	github.com/TaoYang526/goutils v0.0.0-20210209083921-039008f0a57d
 	github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20210106054514-49c4f33ed27b
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/golang/protobuf v1.4.0 // indirect

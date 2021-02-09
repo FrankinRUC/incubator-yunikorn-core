@@ -621,7 +621,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 // This includes placeholders
 func (sa *Application) tryAllocate(headRoom *resources.Resource,
 	getNodeSortingAlgorithmFn func() interfaces.NodeSortingAlgorithm) *Allocation {
-	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
+	prof := profiling.GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	sa.Lock()
 	defer sa.Unlock()
 	prof.AddCheckpoint("APP sort requests BEGIN")
@@ -857,7 +857,7 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
 func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIterator) *Allocation {
-	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
+	prof := profiling.GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)
 	// check if the ask is reserved or not
@@ -946,7 +946,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 
 // Try allocating on one specific node
 func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
-	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
+	prof := profiling.GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	allocKey := ask.AllocationKey
 	toAllocate := ask.AllocatedResource
 	prof.AddCheckpoint("Try node - preAllocateCheck")

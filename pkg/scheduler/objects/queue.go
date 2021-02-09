@@ -876,7 +876,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
 func (sq *Queue) TryAllocate(getNodeSortingAlgorithmFn func() interfaces.NodeSortingAlgorithm) *Allocation {
-	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
+	prof := profiling.GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	if sq.IsLeafQueue() {
 		prof.AddCheckpoint("Try-Allocate Leaf Queue")
 		// get the headroom

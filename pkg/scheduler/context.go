@@ -105,7 +105,7 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 // Process each partition in the scheduler, walk over each queue and app to check if anything can be scheduled.
 // This can be forked into a go routine per partition if needed to increase parallel allocations
 func (cc *ClusterContext) schedule() {
-	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(ProfilingID)
+	prof := profiling.GetProfilingFromCacheOrEmpty(ProfilingID)
 	// schedule each partition defined in the cluster
 	for _, psc := range cc.GetPartitionMapClone() {
 		// if there are no resources in the partition just skip

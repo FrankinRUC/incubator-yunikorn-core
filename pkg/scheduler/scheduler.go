@@ -59,7 +59,7 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	monitor := newNodesResourceUsageMonitor(s.clusterContext)
 	monitor.start()
 
-	profiling.GetCache().InitProfilingInCache(ProfilingID)
+	profiling.InitProfilingInCache(ProfilingID)
 
 	if !manualSchedule {
 		go s.internalSchedule()

@@ -174,7 +174,7 @@ func (insa *IncrementalNodeSortingAlgorithm) processAllEvents() {
 }
 
 func (insa *IncrementalNodeSortingAlgorithm) GetNodeIterator(request interfaces.Request) interfaces.NodeIterator {
-	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
+	prof := profiling.GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	prof.AddCheckpoint("GetNodeIterator resync BEGIN")
 	// resync subject events
 	insa.processAllEvents()

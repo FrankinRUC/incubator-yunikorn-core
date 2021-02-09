@@ -344,7 +344,7 @@ func (sn *Node) preReserveConditions(allocID string) bool {
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
 func (sn *Node) preConditions(allocID string, allocate bool) bool {
-	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
+	prof := profiling.GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
 		prof.AddCheckpoint("Node preConditions BEGIN")
