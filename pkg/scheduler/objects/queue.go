@@ -33,6 +33,7 @@ import (
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/metrics"
+	schedulingplugins "github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/incubator-yunikorn-core/pkg/webservice/dao"
 )
@@ -47,7 +48,7 @@ type Queue struct {
 	// Private fields need protection
 	sortType     policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
 	children     map[string]*Queue       // Only for direct children, parent queue only
-	applications map[string]*Application // only for leaf queue
+	applications interfaces.Applications // only for leaf queue
 	reservedApps map[string]int          // applications reserved within this queue, with reservation count
 	parent       *Queue                  // link back to the parent in the scheduler
 	preempting   *resources.Resource     // resource considered for preemption in the queue
@@ -73,7 +74,6 @@ type Queue struct {
 func newBlankQueue() *Queue {
 	return &Queue{
 		children:          make(map[string]*Queue),
-		applications:      make(map[string]*Application),
 		reservedApps:      make(map[string]int),
 		properties:        make(map[string]string),
 		stateMachine:      NewObjectState(),
@@ -109,6 +109,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		sq.mergeProperties(parent.getProperties(), conf.Properties)
 	}
 	sq.UpdateSortType()
+	sq.initApplications()
 
 	log.Logger().Debug("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
@@ -145,6 +146,7 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	// pull the properties from the parent that should be set on the child
 	sq.setTemplateProperties(parent.getProperties())
 	sq.UpdateSortType()
+	sq.initApplications()
 	log.Logger().Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
 
@@ -452,7 +454,7 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 func (sq *Queue) AddApplication(app *Application) {
 	sq.Lock()
 	defer sq.Unlock()
-	sq.applications[app.ApplicationID] = app
+	sq.applications.AddApplication(app)
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
 	quota := app.GetTag(appTagNamespaceResourceQuota)
@@ -487,7 +489,7 @@ func (sq *Queue) AddApplication(app *Application) {
 func (sq *Queue) RemoveApplication(app *Application) {
 	// clean up any outstanding pending resources
 	appID := app.ApplicationID
-	if _, ok := sq.applications[appID]; !ok {
+	if app := sq.applications.GetApplication(appID); app == nil {
 		log.Logger().Debug("Application not found while removing from queue",
 			zap.String("queueName", sq.QueuePath),
 			zap.String("applicationID", appID))
@@ -505,16 +507,16 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	sq.Lock()
 	defer sq.Unlock()
 
-	delete(sq.applications, appID)
+	sq.applications.RemoveApplication(appID)
 }
 
 // Get a copy of all apps holding the lock
-func (sq *Queue) getCopyOfApps() map[string]*Application {
+func (sq *Queue) GetCopyOfApps() map[string]interfaces.Application {
 	sq.RLock()
 	defer sq.RUnlock()
-	appsCopy := make(map[string]*Application)
-	for appID, app := range sq.applications {
-		appsCopy[appID] = app
+	appsCopy := make(map[string]interfaces.Application)
+	for _, app := range sq.applications.GetApplications(nil) {
+		appsCopy[app.GetApplicationID()] = app
 	}
 	return appsCopy
 }
@@ -540,7 +542,7 @@ func (sq *Queue) IsEmpty() bool {
 	sq.RLock()
 	defer sq.RUnlock()
 	if sq.isLeaf {
-		return len(sq.applications) == 0
+		return sq.applications.Size() == 0
 	}
 	return len(sq.children) == 0
 }
@@ -616,7 +618,7 @@ func (sq *Queue) RemoveQueue() bool {
 		return false
 	}
 	// cannot remove a queue that has children or applications assigned
-	if len(sq.children) > 0 || len(sq.applications) > 0 {
+	if len(sq.children) > 0 || sq.applications.Size() > 0 {
 		return false
 	}
 	log.Logger().Info("removing queue", zap.String("queue", sq.QueuePath))
@@ -736,18 +738,6 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	return nil
 }
 
-// Return a sorted copy of the applications in the queue. Applications are sorted using the
-// sorting type of the queue.
-// Only applications with a pending resource request are considered.
-// Lock free call all locks are taken when needed in called functions
-func (sq *Queue) sortApplications() []*Application {
-	if !sq.IsLeafQueue() {
-		return nil
-	}
-	// Sort the applications
-	return sortApplications(sq.getCopyOfApps(), sq.getSortType(), sq.GetGuaranteedResource())
-}
-
 // Return a sorted copy of the queues for this parent queue.
 // Only queues with a pending resource request are considered. The queues are sorted using the
 // sorting type for the parent queue.
@@ -769,7 +759,7 @@ func (sq *Queue) sortQueues() []*Queue {
 		}
 	}
 	// Sort the queues
-	sortQueue(sortedQueues, sq.getSortType())
+	sortQueue(sortedQueues, sq.GetSortType())
 
 	return sortedQueues
 }
@@ -888,7 +878,12 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 		// get the headroom
 		headRoom := sq.getHeadRoom()
 		// process the apps (filters out app without pending requests)
-		for _, app := range sq.sortApplications() {
+		appIt := sq.GetApplications().SortForAllocation()
+		for appIt.HasNext() {
+			app, ok := appIt.Next().(*Application)
+			if !ok {
+				return nil
+			}
 			alloc := app.tryAllocate(headRoom, iterator)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
@@ -918,7 +913,12 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
-		for _, app := range sq.sortApplications() {
+		appIt := sq.GetApplications().SortForAllocation()
+		for appIt.HasNext() {
+			app, ok := appIt.Next().(*Application)
+			if !ok {
+				return nil
+			}
 			alloc := app.tryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
@@ -943,8 +943,10 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator,
 func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 	if sq.IsLeafQueue() {
 		headRoom := sq.getMaxHeadRoom()
-		for _, app := range sq.sortApplications() {
-			app.getOutstandingRequests(headRoom, total)
+		appRequestIt := sq.GetApplications().SortForAllocation()
+		for appRequestIt.HasNext() {
+			app := appRequestIt.Next()
+			app.(*Application).getOutstandingRequests(headRoom, total)
 		}
 	} else {
 		for _, child := range sq.sortQueues() {
@@ -1044,11 +1046,14 @@ func (sq *Queue) UnReserve(appID string, releases int) {
 func (sq *Queue) getApplication(appID string) *Application {
 	sq.RLock()
 	defer sq.RUnlock()
-	return sq.applications[appID]
+	if app := sq.applications.GetApplication(appID); app != nil {
+		return app.(*Application)
+	}
+	return nil
 }
 
 // get the queue sort type holding a lock
-func (sq *Queue) getSortType() policies.SortPolicy {
+func (sq *Queue) GetSortType() policies.SortPolicy {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.sortType
@@ -1080,4 +1085,12 @@ func (sq *Queue) String() string {
 	defer sq.RUnlock()
 	return fmt.Sprintf("{QueueName: %s, State: %s, StateTime: %x, MaxResource: %s}",
 		sq.QueuePath, sq.stateMachine.Current(), sq.stateTime, sq.maxResource)
+}
+
+func (sq *Queue) initApplications() {
+	sq.applications = schedulingplugins.GetApplicationsPlugin().NewApplications(sq)
+}
+
+func (sq *Queue) GetApplications() interfaces.Applications {
+	return sq.applications
 }

@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
+
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
@@ -32,6 +34,7 @@ import (
 )
 
 type AllocationAsk struct {
+	interfaces.Request
 	// Extracted info
 	AllocationKey     string
 	AllocatedResource *resources.Resource
@@ -151,4 +154,12 @@ func (aa *AllocationAsk) getTimeout() time.Duration {
 	aa.Lock()
 	defer aa.Unlock()
 	return aa.execTimeout
+}
+
+func (aa *AllocationAsk) GetAllocationKey() string {
+	return aa.AllocationKey
+}
+
+func (aa *AllocationAsk) GetPriority() int32 {
+	return aa.priority
 }
