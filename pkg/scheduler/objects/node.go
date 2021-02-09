@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
@@ -51,6 +52,7 @@ type Node struct {
 
 	preempting   *resources.Resource     // resources considered for preemption
 	reservations map[string]*reservation // a map of reservations
+	nodeObserver interfaces.NodeObserver
 
 	sync.RWMutex
 }
@@ -79,6 +81,7 @@ func NewNode(proto *si.NewNodeInfo) *Node {
 	}
 
 	sn.initializeAttribute(proto.Attributes)
+	sn.NotifyResourceUpdated()
 
 	return sn
 }
@@ -171,6 +174,7 @@ func (sn *Node) refreshAvailableResource() {
 			zap.String("occupied", sn.occupiedResource.String()),
 			zap.String("allocated", sn.allocatedResource.String()))
 	}
+	sn.NotifyResourceUpdated()
 }
 
 // Return the allocation based on the uuid of the allocation.
@@ -202,6 +206,7 @@ func (sn *Node) SetSchedulable(schedulable bool) {
 	sn.Lock()
 	defer sn.Unlock()
 	sn.schedulable = schedulable
+	sn.NotifyStateUpdated()
 }
 
 // Can this node be used in scheduling.
@@ -272,6 +277,7 @@ func (sn *Node) RemoveAllocation(uuid string) *Allocation {
 		delete(sn.allocations, uuid)
 		sn.allocatedResource.SubFrom(alloc.AllocatedResource)
 		sn.availableResource.AddTo(alloc.AllocatedResource)
+		sn.NotifyResourceUpdated()
 		return alloc
 	}
 
@@ -293,6 +299,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 		sn.allocations[alloc.UUID] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
+		sn.NotifyResourceUpdated()
 		return true
 	}
 	return false
@@ -504,4 +511,27 @@ func (sn *Node) UnReserveApps() ([]string, []int) {
 		askRelease = append(askRelease, num)
 	}
 	return appReserve, askRelease
+}
+
+func (sn *Node) GetNodeID() string {
+	return sn.NodeID
+}
+
+// notify resource-updated node to node observer
+func (sn *Node) NotifyResourceUpdated() {
+	if sn.nodeObserver != nil {
+		sn.nodeObserver.ResourceUpdated(sn)
+	}
+}
+
+// notify state-updated node to node observer
+func (sn *Node) NotifyStateUpdated() {
+	if sn.nodeObserver != nil {
+		sn.nodeObserver.StateUpdated(sn)
+	}
+}
+
+// set node observer
+func (sn *Node) SetNodeObserver(nodeObserver interfaces.NodeObserver) {
+	sn.nodeObserver = nodeObserver
 }

@@ -873,7 +873,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocation {
+func (sq *Queue) TryAllocate(getNodeSortingAlgorithmFn func() interfaces.NodeSortingAlgorithm) *Allocation {
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
@@ -884,7 +884,7 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 			if !ok {
 				return nil
 			}
-			alloc := app.tryAllocate(headRoom, iterator)
+			alloc := app.tryAllocate(headRoom, getNodeSortingAlgorithmFn)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -896,7 +896,7 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.TryAllocate(iterator)
+			alloc := child.TryAllocate(getNodeSortingAlgorithmFn)
 			if alloc != nil {
 				return alloc
 			}
@@ -910,7 +910,8 @@ func (sq *Queue) TryAllocate(iterator func() interfaces.NodeIterator) *Allocatio
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator, getnode func(string) *Node) *Allocation {
+func (sq *Queue) TryPlaceholderAllocate(getNodeSortingAlgorithmFn func() interfaces.NodeSortingAlgorithm,
+	getnode func(string) *Node) *Allocation {
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
 		appIt := sq.GetApplications().SortForAllocation()
@@ -919,7 +920,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator,
 			if !ok {
 				return nil
 			}
-			alloc := app.tryPlaceholderAllocate(iterator, getnode)
+			alloc := app.tryPlaceholderAllocate(getNodeSortingAlgorithmFn, getnode)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -931,7 +932,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() interfaces.NodeIterator,
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.TryPlaceholderAllocate(iterator, getnode)
+			alloc := child.TryPlaceholderAllocate(getNodeSortingAlgorithmFn, getnode)
 			if alloc != nil {
 				return alloc
 			}
@@ -960,7 +961,7 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are currently NOT sorted and are iterated over in a random order.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *Allocation {
+func (sq *Queue) TryReservedAllocate(getNodeSortingAlgorithmFn func() interfaces.NodeSortingAlgorithm) *Allocation {
 	if sq.IsLeafQueue() {
 		// skip if it has no reservations
 		reservedCopy := sq.getReservedApps()
@@ -981,7 +982,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *A
 						zap.String("appID", appID))
 					return nil
 				}
-				alloc := app.tryReservedAllocate(headRoom, iterator)
+				alloc := app.tryReservedAllocate(headRoom, getNodeSortingAlgorithmFn)
 				if alloc != nil {
 					log.Logger().Debug("reservation found for allocation found on queue",
 						zap.String("queueName", sq.QueuePath),
@@ -994,7 +995,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() interfaces.NodeIterator) *A
 	} else {
 		// process the child queues (filters out queues that have no pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.TryReservedAllocate(iterator)
+			alloc := child.TryReservedAllocate(getNodeSortingAlgorithmFn)
 			if alloc != nil {
 				return alloc
 			}

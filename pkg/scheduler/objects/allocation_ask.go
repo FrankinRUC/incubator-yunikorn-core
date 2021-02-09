@@ -163,3 +163,7 @@ func (aa *AllocationAsk) GetAllocationKey() string {
 func (aa *AllocationAsk) GetPriority() int32 {
 	return aa.priority
 }
+
+func (aa *AllocationAsk) GetAllocatedResource() *resources.Resource {
+	return aa.AllocatedResource
+}

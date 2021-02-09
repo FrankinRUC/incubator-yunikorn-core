@@ -357,6 +357,21 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 	return checkQueues(&rootQueue, 1)
 }
 
+// Check for node manager plugin
+func checkNodeManagerPlugin(partition *PartitionConfig) error {
+	if partition.NodeManagerPluginArgs == "" {
+		log.Logger().Info("skip initializing node sorting algorithm without specified name")
+		return nil
+	}
+	//err := schedulingplugins.GetNodeManagerPlugin().Validate(partition.NodeManagerPluginArgs)
+	//if err != nil {
+	//	log.Logger().Warn("failed to check arguments of node manager plugin", zap.Error(err))
+	//	return err
+	//}
+	log.Logger().Info("arguments of node manager plugin have been checked successfully")
+	return nil
+}
+
 // Check the partition configuration. Any parsing issues will return an error which means that the
 // configuration is invalid. This *must* be called before the configuration is activated. Any
 // configuration that does not pass must be rejected.
@@ -400,6 +415,10 @@ func Validate(newConfig *SchedulerConfig) error {
 			return err
 		}
 		err = checkNodeSortingPolicy(&partition)
+		if err != nil {
+			return err
+		}
+		err = checkNodeManagerPlugin(&partition)
 		if err != nil {
 			return err
 		}

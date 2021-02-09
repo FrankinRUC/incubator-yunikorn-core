@@ -138,7 +138,7 @@ func (manager partitionManager) remove() {
 		zap.Int("numOfNodes", len(nodes)),
 		zap.String("partitionName", manager.pc.Name))
 	for i := range nodes {
-		_ = manager.pc.removeNode(nodes[i].NodeID)
+		_ = manager.pc.removeNode(nodes[i].GetNodeID())
 	}
 	log.Logger().Info("removing partition",
 		zap.String("partitionName", manager.pc.Name))

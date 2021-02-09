@@ -19,6 +19,14 @@
 package entrypoint
 
 import (
+	"os"
+	"strings"
+
+	"go.uber.org/zap"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins"
+
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/events"
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
@@ -68,6 +76,19 @@ func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
 		events.CreateAndSetEventCache()
 		eventCache = events.GetEventCache()
 		eventPublisher = events.CreateShimPublisher(eventCache.Store)
+	}
+
+	//init plugins
+	pluginsConfigNames := os.Getenv("PLUGINS")
+	log.Logger().Info("read plugins config names from environment", zap.String("PLUGINS", pluginsConfigNames))
+	if pluginsConfigNames != "" {
+		pluginsConfig := &configs.PluginsConfig{}
+		for _, plugin_name := range strings.Split(pluginsConfigNames, ",") {
+			pluginsConfig.Plugins = append(pluginsConfig.Plugins, &configs.PluginConfig{
+				Name: plugin_name,
+			})
+		}
+		plugins.Init(plugins.NewRegistry(), pluginsConfig)
 	}
 
 	sched := scheduler.NewScheduler()

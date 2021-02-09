@@ -117,6 +117,35 @@ type AppIterator interface {
 	Size() int
 }
 
+// This interface is used by scheduler plugins to get information of a partition
+type Partition interface {
+	// return partition name
+	GetName() string
+	// return all nodes
+	GetNodes() []Node
+	// return schedulable nodes(exclude reserved nodes)
+	GetSchedulableNodes() []Node
+	// return sorting policy
+	GetNodeSortingPolicy() policies.SortingPolicy
+}
+
+type Node interface {
+	// return the node ID
+	GetNodeID() string
+	// return the available resource
+	GetAvailableResource() *resources.Resource
+	// return the allocated resource
+	GetAllocatedResource() *resources.Resource
+	// return the capacity
+	GetCapacity() *resources.Resource
+	// return the occupied resource
+	GetOccupiedResource() *resources.Resource
+	// return an array of all reservation keys
+	GetReservations() []string
+	// Can this node be used in scheduling.
+	IsSchedulable() bool
+}
+
 // This interface is used by scheduler plugins to get information of a queue
 type Queue interface {
 	// get the guaranteed resource
@@ -162,4 +191,36 @@ type Request interface {
 	GetPriority() int32
 	// get the create time
 	GetCreateTime() time.Time
+	// get the allocated resource
+	GetAllocatedResource() *resources.Resource
+}
+
+// NodeSortingAlgorithm is an interface which can provide iterator of sorted nodes
+// for the scheduler according to specified request.
+type NodeSortingAlgorithm interface {
+	// return sorted nodes according to the request,
+	// should also support nil request.
+	GetNodeIterator(request Request) NodeIterator
+}
+
+// NodeObserver is an interface which can observe node actions (addition or removal)
+// or state/resource updates on node.
+type NodeObserver interface {
+	// non-blocking handler for added node
+	Add(node Node)
+	// non-blocking handler for removed node
+	Remove(node Node)
+	// non-blocking handler for state-updated node
+	StateUpdated(node Node)
+	// non-blocking handler for resource-updated node
+	ResourceUpdated(node Node)
+}
+
+type NodeManager interface {
+	NodeSortingAlgorithm
+	NodeObserver
+	// run internal service if necessary
+	Run()
+	// stop internal service if necessary
+	Stop()
 }

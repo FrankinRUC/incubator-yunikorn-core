@@ -327,6 +327,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 				return err
 			}
 			go part.partitionManager.Run()
+			go part.nodeManager.Run()
 			cc.partitions[partitionName] = part
 		}
 		// add it to the partitions to update
@@ -337,6 +338,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 	for _, part := range cc.partitions {
 		if !visited[part.Name] {
 			part.partitionManager.Stop()
+			part.nodeManager.Stop()
 			log.Logger().Info("marked partition for removal",
 				zap.String("partitionName", part.Name))
 		}

@@ -22,7 +22,9 @@ func NewRegistry() Registry {
 	return Registry{
 		defaults.DefaultApplicationsPluginName:   defaults.NewDefaultApplicationsPlugin,
 		defaults.DefaultRequestsPluginName:       defaults.NewDefaultRequestsPlugin,
+		defaults.DefaultNodeManagerPluginName:    defaults.NewDefaultNodeManagerPlugin,
 		internals.InternalAppsRequestsPluginName: internals.NewInternalAppsRequestsPlugin,
+		internals.InternalNodeManagerPluginName:  internals.NewInternalNodeManagerPlugin,
 	}
 }
 

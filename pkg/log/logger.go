@@ -20,7 +20,9 @@ package log
 
 import (
 	"fmt"
+	"os"
 	"reflect"
+	"strconv"
 	"sync"
 
 	"go.uber.org/zap"
@@ -81,8 +83,15 @@ func InitAndSetLevel(level zapcore.Level) {
 // Enables development mode (DPanicLevel),
 // Print stack traces for messages at WarnLevel and above
 func createConfig() *zap.Config {
+	logLevelEnvValue := os.Getenv("LOG_LEVEL")
+	logLevel := zap.DebugLevel
+	if logLevelEnvValue != "" {
+		if level, err := strconv.Atoi(logLevelEnvValue); err == nil {
+			logLevel = zapcore.Level(level)
+		}
+	}
 	return &zap.Config{
-		Level:       zap.NewAtomicLevelAt(zap.DebugLevel),
+		Level:       zap.NewAtomicLevelAt(logLevel),
 		Development: true,
 		Encoding:    "console",
 		EncoderConfig: zapcore.EncoderConfig{
