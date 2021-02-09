@@ -23,6 +23,7 @@ import "sync"
 const (
 	SchedulerConfigPath        = "scheduler-config-path"
 	DefaultSchedulerConfigPath = "/etc/yunikorn"
+	SchedulerProfilingID       = "scheduler-prof"
 )
 
 var ConfigMap map[string]string

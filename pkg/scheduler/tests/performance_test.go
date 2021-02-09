@@ -24,6 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins"
+	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins/internals"
+
 	"go.uber.org/zap"
 	"gotest.tools/assert"
 
@@ -172,12 +175,31 @@ partitions:
 	b.Logf("Total time to allocate %d containers in %s, %f per second", numPods, duration, float64(numPods)/duration.Seconds())
 }
 
+func setupInternalPlugin() {
+	pluginsConfig := &configs.PluginsConfig{
+		Plugins: []*configs.PluginConfig{
+			{
+				Name: internals.InternalAppsRequestsPluginName,
+			},
+			{
+				Name: internals.InternalNodeManagerPluginName,
+			},
+		},
+	}
+	plugins.Init(plugins.NewRegistry(), pluginsConfig)
+}
+
+func teardownInternalPlugin() {
+	plugins.Init(plugins.NewRegistry(), plugins.GetDefaultPluginsConfig())
+}
+
 func BenchmarkScheduling(b *testing.B) {
+	setupInternalPlugin()
 	tests := []struct{ numNodes, numPods int }{
 		{numNodes: 500, numPods: 10000},
-		{numNodes: 1000, numPods: 10000},
-		{numNodes: 2000, numPods: 10000},
-		{numNodes: 5000, numPods: 10000},
+		//{numNodes: 1000, numPods: 10000},
+		//{numNodes: 2000, numPods: 10000},
+		//{numNodes: 5000, numPods: 10000},
 	}
 	for _, test := range tests {
 		name := fmt.Sprintf("%vNodes/%vPods", test.numNodes, test.numPods)
@@ -185,4 +207,5 @@ func BenchmarkScheduling(b *testing.B) {
 			benchmarkScheduling(b, test.numNodes, test.numPods)
 		})
 	}
+	teardownInternalPlugin()
 }

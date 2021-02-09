@@ -25,6 +25,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TaoYang526/goutils/pkg/profiling"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+
 	schedulingplugins "github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins"
 
 	"github.com/looplab/fsm"
@@ -618,10 +621,13 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 // This includes placeholders
 func (sa *Application) tryAllocate(headRoom *resources.Resource,
 	getNodeSortingAlgorithmFn func() interfaces.NodeSortingAlgorithm) *Allocation {
+	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	sa.Lock()
 	defer sa.Unlock()
+	prof.AddCheckpoint("APP sort requests BEGIN")
 	// get all the sorted requests from the app sorted in order
 	requestIt := sa.requests.SortForAllocation()
+	prof.AddCheckpoint("APP sort requests END")
 	for requestIt.HasNext() {
 		request := requestIt.Next().(*AllocationAsk)
 		// if request is not a placeholder but part of a task group and there are still placeholders allocated we do
@@ -630,6 +636,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource,
 		if !request.placeholder && request.taskGroupName != "" && !resources.IsZero(sa.allocatedPlaceholder) {
 			continue
 		}
+		prof.AddCheckpoint("APP request BEGIN")
 		// resource must fit in headroom otherwise skip the request
 		if !resources.FitIn(headRoom, request.AllocatedResource) {
 			// post scheduling events via the event plugin
@@ -643,11 +650,16 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource,
 					eventCache.AddEvent(event)
 				}
 			}
+			prof.AddCheckpoint("APP request SKIPPED")
 			continue
 		}
+		prof.AddCheckpoint("APP request get nodes BEGIN")
 		iterator := getNodeSortingAlgorithmFn().GetNodeIterator(request)
+		prof.AddCheckpoint("APP request get nodes END")
 		if iterator != nil {
+			prof.AddCheckpoint("APP request try nodes BEGIN")
 			alloc := sa.tryNodes(request, iterator)
+			prof.AddCheckpoint("APP request try nodes END")
 			// have a candidate return it
 			if alloc != nil {
 				return alloc
@@ -845,6 +857,7 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator interfaces
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
 func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIterator) *Allocation {
+	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)
 	// check if the ask is reserved or not
@@ -857,10 +870,13 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 			log.Logger().Warn("Node iterator failed to return a node")
 			return nil
 		}
+		prof.AddCheckpoint("Try nodes - FitInNode")
 		// skip over the node if the resource does not fit the node at all.
 		if !node.FitInNode(ask.AllocatedResource) {
+			prof.AddCheckpoint("Try nodes - FitInNode/FAILED")
 			continue
 		}
+		prof.AddCheckpoint("Try nodes - FitInNode/SUCCEED")
 		alloc := sa.tryNode(node, ask)
 		// allocation worked so return
 		if alloc != nil {
@@ -930,17 +946,24 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator interfaces.NodeIter
 
 // Try allocating on one specific node
 func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
+	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	allocKey := ask.AllocationKey
 	toAllocate := ask.AllocatedResource
+	prof.AddCheckpoint("Try node - preAllocateCheck")
 	// create the key for the reservation
 	if err := node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask), false); err != nil {
 		// skip schedule onto node
 		return nil
 	}
+
+	prof.AddCheckpoint("Try node - preAllocateConditions(predicates)")
 	// skip the node if conditions can not be satisfied
 	if !node.preAllocateConditions(allocKey) {
+		prof.AddCheckpoint("Try node - preAllocateConditions(predicates) FAILED")
 		return nil
 	}
+
+	prof.AddCheckpoint("Try node - add allocation BEGIN")
 	// everything OK really allocate
 	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, ask)
 	if node.AddAllocation(alloc) {
@@ -962,6 +985,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 		// return allocation
 		return alloc
 	}
+	prof.AddCheckpoint("Try node - add allocation END")
 	return nil
 }
 

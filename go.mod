@@ -23,6 +23,7 @@ go 1.12
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.0.1 // indirect
+	github.com/TaoYang526/goutils v0.0.0-20210208093809-10a703e80a04
 	github.com/apache/incubator-yunikorn-scheduler-interface v0.0.0-20210106054514-49c4f33ed27b
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/golang/protobuf v1.4.0 // indirect
@@ -31,7 +32,6 @@ require (
 	github.com/looplab/fsm v0.1.0
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/opentracing/opentracing-go v1.2.0
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v0.9.4
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.4.1

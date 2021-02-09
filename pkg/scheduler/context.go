@@ -23,6 +23,8 @@ import (
 	"math"
 	"sync"
 
+	"github.com/TaoYang526/goutils/pkg/profiling"
+
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/common"
@@ -39,6 +41,8 @@ import (
 )
 
 const disableReservation = "DISABLE_RESERVATION"
+
+const ProfilingID string = "scheduler"
 
 type ClusterContext struct {
 	partitions     map[string]*PartitionContext
@@ -101,6 +105,7 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 // Process each partition in the scheduler, walk over each queue and app to check if anything can be scheduled.
 // This can be forked into a go routine per partition if needed to increase parallel allocations
 func (cc *ClusterContext) schedule() {
+	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(ProfilingID)
 	// schedule each partition defined in the cluster
 	for _, psc := range cc.GetPartitionMapClone() {
 		// if there are no resources in the partition just skip
@@ -111,23 +116,44 @@ func (cc *ClusterContext) schedule() {
 		if psc.isStopped() {
 			continue
 		}
+		prof.StartExecution()
 		// try reservations first
 		alloc := psc.tryReservedAllocate()
+		prof.AddCheckpoint("Try-Reserved-Allocate End")
 		if alloc == nil {
+			prof.AddCheckpoint("Try-Placeholder-Allocate Begin")
 			// placeholder replacement second
 			alloc = psc.tryPlaceholderAllocate()
+			prof.AddCheckpoint("Try-Placeholder-Allocate End")
 			// nothing reserved that can be allocated try normal allocate
 			if alloc == nil {
+				prof.AddCheckpoint("Try-Allocate Begin")
 				alloc = psc.tryAllocate()
+				prof.AddCheckpoint("Try-Allocate End")
 			}
 		}
 		if alloc != nil {
 			if alloc.Result == objects.Replaced {
+				prof.AddCheckpoint("notifyRMAllocationReleased Begin")
 				// communicate the removal to the RM
 				cc.notifyRMAllocationReleased(psc.RmID, alloc.Releases, si.AllocationRelease_PLACEHOLDER_REPLACED, "replacing UUID: "+alloc.UUID)
+				prof.AddCheckpoint("notifyRMAllocationReleased End")
 			} else {
+				prof.AddCheckpoint("notifyRMNewAllocation Begin")
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
+				prof.AddCheckpoint("notifyRMNewAllocation End")
 			}
+			prof.FinishExecution(true)
+			if prof.GetCount() > 0 && prof.GetCount()%1000 == 0 {
+				log.Logger().Info("=================================>")
+				stats := prof.GetTimeStatistics()
+				for _, st := range stats.StagesTime {
+					log.Logger().Info(fmt.Sprintf("%v", st))
+				}
+				prof.Clear()
+			}
+		} else {
+			prof.FinishExecution(false)
 		}
 	}
 }

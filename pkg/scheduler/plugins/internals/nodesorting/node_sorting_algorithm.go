@@ -23,6 +23,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TaoYang526/goutils/pkg/profiling"
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins/defaults"
@@ -171,12 +174,16 @@ func (insa *IncrementalNodeSortingAlgorithm) processAllEvents() {
 }
 
 func (insa *IncrementalNodeSortingAlgorithm) GetNodeIterator(request interfaces.Request) interfaces.NodeIterator {
+	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
+	prof.AddCheckpoint("GetNodeIterator resync BEGIN")
 	// resync subject events
 	insa.processAllEvents()
+	prof.AddCheckpoint("GetNodeIterator resync END")
 	// resort nodes with non-zero dynamic score
 	var nodesManager *IncrementalNodesManager
 	validDynamicScorerConfigs := insa.nodeEvaluator.GetValidDynamicScorerConfigs(request)
 	if len(validDynamicScorerConfigs) > 0 {
+		prof.AddCheckpoint("GetNodeIterator dynamic score prepare BEGIN")
 		nodesManager = insa.nodesManager.clone()
 		// prepare update nodes
 		updateNodes := make([]*NodeSnapshot, 0)
@@ -197,6 +204,8 @@ func (insa *IncrementalNodeSortingAlgorithm) GetNodeIterator(request interfaces.
 				})
 			}
 		}
+		log.Logger().Info("updated nodes for dynamic scorer", zap.Int("size", len(updateNodes)))
+		prof.AddCheckpoint("GetNodeIterator dynamic score update BEGIN")
 		//TODO: If too many nodes have non-zero dynamic score,
 		// maybe we should considering other sorting approaches.
 		for _, updatedNodeSnapshot := range updateNodes {
@@ -208,11 +217,14 @@ func (insa *IncrementalNodeSortingAlgorithm) GetNodeIterator(request interfaces.
 				zap.Any("subScores", updatedNodeSnapshot.cachedSubScores),
 			)
 		}
+		prof.AddCheckpoint("GetNodeIterator dynamic score END")
 	} else {
 		nodesManager = insa.nodesManager
 	}
+	prof.AddCheckpoint("GetNodeIterator sort BEGIN")
 	// return iterator of sorted nodes
 	sortedNodes := nodesManager.getSortedNodes(insa.partition.GetNodeSortingPolicy())
+	prof.AddCheckpoint("GetNodeIterator sort END")
 	return defaults.NewDefaultNodeIterator(sortedNodes)
 }
 

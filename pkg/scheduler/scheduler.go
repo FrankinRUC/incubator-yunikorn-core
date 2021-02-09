@@ -22,6 +22,8 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/TaoYang526/goutils/pkg/profiling"
+
 	"go.uber.org/zap"
 
 	"github.com/apache/incubator-yunikorn-core/pkg/handler"
@@ -56,6 +58,8 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	// Start resource monitor if necessary (majorly for testing)
 	monitor := newNodesResourceUsageMonitor(s.clusterContext)
 	monitor.start()
+
+	profiling.GetCache().InitProfilingInCache(ProfilingID)
 
 	if !manualSchedule {
 		go s.internalSchedule()

@@ -174,7 +174,6 @@ func (dr *SortedRequests) SortForAllocation() interfaces.RequestIterator {
 			priorityGroups = append(priorityGroups, v.(PriorityGroup))
 		}
 	} else if len(dr.cachedPriorityGroups) == 0 {
-		log.Logger().Info("cached priority groups are empty")
 		return defaults.NewDefaultRequestIterator([]interfaces.Request{})
 	} else {
 		priorityGroups = append(priorityGroups, dr.cachedPriorityGroups[0])

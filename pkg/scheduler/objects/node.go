@@ -23,9 +23,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/TaoYang526/goutils/pkg/profiling"
+
 	"github.com/apache/incubator-yunikorn-core/pkg/interfaces"
 	"go.uber.org/zap"
 
+	"github.com/apache/incubator-yunikorn-core/pkg/common/configs"
 	"github.com/apache/incubator-yunikorn-core/pkg/common/resources"
 	"github.com/apache/incubator-yunikorn-core/pkg/log"
 	"github.com/apache/incubator-yunikorn-core/pkg/plugins"
@@ -341,8 +344,10 @@ func (sn *Node) preReserveConditions(allocID string) bool {
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
 func (sn *Node) preConditions(allocID string, allocate bool) bool {
+	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	// Check the predicates plugin (k8shim)
 	if plugin := plugins.GetPredicatesPlugin(); plugin != nil {
+		prof.AddCheckpoint("Node preConditions BEGIN")
 		// checking predicates
 		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocID,
@@ -354,10 +359,12 @@ func (sn *Node) preConditions(allocID string, allocate bool) bool {
 				zap.String("nodeID", sn.NodeID),
 				zap.Bool("allocateFlag", allocate),
 				zap.Error(err))
+			prof.AddCheckpoint("Node preConditions FAILED " + err.Error())
 			// running predicates failed
 			return false
 		}
 	}
+	prof.AddCheckpoint("Node preConditions succeed")
 	// all predicate plugins passed
 	return true
 }

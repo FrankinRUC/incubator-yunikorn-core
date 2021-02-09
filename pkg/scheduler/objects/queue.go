@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TaoYang526/goutils/pkg/profiling"
+
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
@@ -874,16 +876,21 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
 func (sq *Queue) TryAllocate(getNodeSortingAlgorithmFn func() interfaces.NodeSortingAlgorithm) *Allocation {
+	prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(configs.SchedulerProfilingID)
 	if sq.IsLeafQueue() {
+		prof.AddCheckpoint("Try-Allocate Leaf Queue")
 		// get the headroom
 		headRoom := sq.getHeadRoom()
+		prof.AddCheckpoint("Sort Apps Begin")
 		// process the apps (filters out app without pending requests)
 		appIt := sq.GetApplications().SortForAllocation()
+		prof.AddCheckpoint("Sort Apps End")
 		for appIt.HasNext() {
 			app, ok := appIt.Next().(*Application)
 			if !ok {
 				return nil
 			}
+			prof.AddCheckpoint("Try-Allocate APP Begin")
 			alloc := app.tryAllocate(headRoom, getNodeSortingAlgorithmFn)
 			if alloc != nil {
 				log.Logger().Debug("allocation found on queue",
@@ -892,8 +899,10 @@ func (sq *Queue) TryAllocate(getNodeSortingAlgorithmFn func() interfaces.NodeSor
 					zap.String("allocation", alloc.String()))
 				return alloc
 			}
+			prof.AddCheckpoint("Try-Allocate APP End")
 		}
 	} else {
+		prof.AddCheckpoint("Try-Allocate Parent Queue")
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
 			alloc := child.TryAllocate(getNodeSortingAlgorithmFn)

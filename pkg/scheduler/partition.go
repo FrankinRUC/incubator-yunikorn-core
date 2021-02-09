@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TaoYang526/goutils/pkg/profiling"
+
 	schedulingplugins "github.com/apache/incubator-yunikorn-core/pkg/scheduler/plugins"
 
 	"github.com/looplab/fsm"
@@ -713,6 +715,9 @@ func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryAllocate() *objects.Allocation {
+	if prof := profiling.GetCache().GetProfilingFromCacheOrEmpty(ProfilingID); prof != nil {
+		prof.AddCheckpoint("Try-Allocate Partition")
+	}
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		// nothing to do just return
 		return nil
